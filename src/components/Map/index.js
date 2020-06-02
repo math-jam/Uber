@@ -1,36 +1,74 @@
-import React, { useEffect, useState } from 'react'
-import MapView from 'react-native-maps'
-import { View } from 'react-native'
+import React, { useEffect, useState } from "react";
+import { View, Image } from "react-native";
+import MapView, { Marker } from "react-native-maps";
+import Geocoder from "react-native-geocoding";
 
-import Search from '../Search'
+import { getPixelSize } from "../../utils";
+
+import Search from "../Search";
+import Directions from "../Directions";
+import Details from "../Details";
+
+import markerImage from "../../../assets/marker.png";
+import backImage from "../../../assets/back.png";
+
+import {
+  Back,
+  LocationBox,
+  LocationText,
+  LocationTimeBox,
+  LocationTimeText,
+  LocationTimeTextSmall
+} from "./styles";
+
+Geocoder.init("AIzaSyB1O8amubeMkw_7ok2jUhtVj9IkME9K8sc");
 
 export default function Map() {
-  const [region, getRegion] = useState({})
+  const [region, setRegion] = useState()
+  const [destination, setDestination] = useState()
+  const [duration, setDuration] = useState()
+  const [location, setLocation] = useState()
 
   useEffect(() => {
     navigator.geolocation.getCurrentPosition(
-      ({ coords: { latitude, longitude } }) => {
-        getRegion({ 
-          latitude, 
-          longitude, 
+      async ({ coords: { latitude, longitude } }) => {
+        const response = await Geocoder.from({ latitude, longitude });
+        const address = response.results[0].formatted_address;
+        const location = address.substring(0, address.indexOf(","));
+
+        setRegion({
+          latitude,
+          longitude,
           latitudeDelta: 0.0143,
-          longitudeDelta: 0.0134,
+          longitudeDelta: 0.0134
         })
-
-        console.log('region', region)
-
+        setLocation(location)
       },
-      () => {},
+      () => {}, 
       {
         timeout: 2000,
         enableHighAccuracy: true,
-        maximumAge: 1000,
+        maximumAge: 1000
       }
-    )
-    console.log(region)
+    );
   }, [])
-
   
+  const handleLocationSelected = (data, { geometry }) => {
+    const {
+      location: { lat: latitude, lng: longitude }
+    } = geometry;
+
+    setDestination({
+      latitude,
+      longitude,
+      title: data.structured_formatting.main_text
+    })
+  }
+
+  const handleBack = () => {
+    setDestination(null)
+  }
+
   return (
     <View style={{ flex: 1 }}>
       <MapView
@@ -38,8 +76,59 @@ export default function Map() {
         region={region}
         showsUserLocation
         loadingEnabled
-      />
-      <Search />
+        ref={el => (this.mapView = el)}
+      >
+        {destination && (
+          <>
+            <Directions
+              origin={region}
+              destination={destination}
+              onReady={result => {
+                setDuration(Math.floor(result.duration))
+
+                this.mapView.fitToCoordinates(result.coordinates, {
+                  edgePadding: {
+                    right: getPixelSize(50),
+                    left: getPixelSize(50),
+                    top: getPixelSize(50),
+                    bottom: getPixelSize(350)
+                  }
+                })
+              }}
+            />
+            <Marker
+              coordinate={destination}
+              anchor={{ x: 0, y: 0 }}
+              image={markerImage}
+            >
+              <LocationBox>
+                <LocationText>{destination.title}</LocationText>
+              </LocationBox>
+            </Marker>
+
+            <Marker coordinate={region} anchor={{ x: 0, y: 0 }}>
+              <LocationBox>
+                <LocationTimeBox>
+                  <LocationTimeText>{duration}</LocationTimeText>
+                  <LocationTimeTextSmall>MIN</LocationTimeTextSmall>
+                </LocationTimeBox>
+                <LocationText>{location}</LocationText>
+              </LocationBox>
+            </Marker>
+          </>
+        )}
+      </MapView>
+
+      {destination ? (
+        <>
+          <Back onPress={() => handleBack()}>
+            <Image source={backImage} />
+          </Back>
+          <Details />
+        </>
+      ) : (
+        <Search onLocationSelected={(handleLocationSelected} />
+      )}
     </View>
-  )
+  );
 }
